@@ -97,13 +97,31 @@ class MeetingInfo:
     def __init__(self, meeting_summary: MeetingSearchResult, meeting_details: MeetingDetails):
         self.meeting_summary = meeting_summary
         self.meeting_details = meeting_details
+        self.meeting_info_dict = {
+            "meeting_summary": self.summary_dict(),
+            "meeting_details": self.details_dict()
+        }
+
+    def summary_dict(self):
+        return {
+            "meeting_name": self.meeting_summary.meeting_name,
+            "meeting_detail_url": self.meeting_summary.meeting_detail_url
+        }
+
+    def details_dict(self):
+        return {
+            "topics": [topic.title for topic in self.meeting_details.topics],
+            "speakers": {
+                "text": [speaker.name for speaker in self.meeting_details.speakers]
+            }
+        }
 
 
 class MeetingDownloader:
     def __init__(self, meeting_date):
         search_results_downloader = MeetingSearchDownloader(meeting_date)
         meeting_search_results = search_results_downloader.get_meeting_search_results()
-        self.meetings = [MeetingInfo(meeting_summary, meeting_summary.get_meeting_details())
+        self.meetings = [MeetingInfo(meeting_summary, meeting_summary.get_meeting_details()).meeting_info_dict
                          for meeting_summary in meeting_search_results]
 
 
