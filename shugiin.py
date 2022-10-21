@@ -64,9 +64,15 @@ class Topic:
 class Speaker:
     def __init__(self, speaker_elm: bs4.element.Tag):
         self.name = self.__get_name(speaker_elm)
+        self.attributes = self.__get_attributes(speaker_elm)
 
     def __get_name(self, speaker_elm):
-        return speaker_elm.text
+        return re.sub("\(.+?\)", "", speaker_elm.text)
+
+    def __get_attributes(self, speaker_elm):
+        attributes_str = re.search(
+            "(?<=\().+?(?=\))", speaker_elm.text).group()
+        return attributes_str.split('・')
 
 
 class MeetingDetails:
@@ -79,15 +85,33 @@ class MeetingDetailsDownloader:
     def __init__(self, meeting_search_result: MeetingSearchResult):
         self.meeting_details_page_data = self.__get_meeting_details_page(
             meeting_search_result.meeting_detail_url)
+        self.tables = self.__get_tables()
+        self.topics_table = self.__get_topics_table()
+        self.speakers_table = self.__get_speakers_list_table()
+        self.speakers_time_table = self.__get_speaker_time_list_table()
 
     def __get_meeting_details_page(self, meeting_detail_url: str) -> BeautifulSoup:
         meeting_details_page_response = requests.get(meeting_detail_url)
         return BeautifulSoup(meeting_details_page_response.content, "html.parser")
 
+    def __get_tables(self):
+        tables = self.meeting_details_page_data.select(
+            'div#library2 table')
+        return tables
+
+    def __get_topics_table(self):
+        return self.tables[0]
+
+    def __get_speakers_list_table(self):
+        return self.tables[1]
+
+    def __get_speaker_time_list_table(self):
+        return self.tables[2]
+
     def get_meeting_details(self) -> MeetingDetails:
-        topics_elm = self.meeting_details_page_data.select('td[width="595"]')
+        topics_elm = self.topics_table.select('td[width="595"]')
         topics = [Topic(topic_elm) for topic_elm in topics_elm]
-        speakers_elm = self.meeting_details_page_data.select(
+        speakers_elm = self.speakers_time_table.select(
             'td[width="380"] a')
         speakers = [Speaker(speaker_elm) for speaker_elm in speakers_elm]
         return MeetingDetails(topics, speakers)
@@ -111,9 +135,7 @@ class MeetingInfo:
     def details_dict(self):
         return {
             "topics": [topic.title for topic in self.meeting_details.topics],
-            "speakers": {
-                "text": [speaker.name for speaker in self.meeting_details.speakers]
-            }
+            "speakers": [{speaker.name: speaker.attributes} for speaker in self.meeting_details.speakers]
         }
 
 
@@ -125,9 +147,9 @@ class MeetingDownloader:
                          for meeting_summary in meeting_search_results]
 
 
-meeting_start_date = date(2022, 10, 1)
+meeting_start_date = date(2022, 10, 17)
 meetings = {}
-for i in range(20):
+for i in range(3):
     meeting_date = meeting_start_date + timedelta(days=i)
     meetings[meeting_date] = MeetingDownloader(meeting_date).meetings
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
