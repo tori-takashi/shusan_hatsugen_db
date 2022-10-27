@@ -1,0 +1,78 @@
+version: "3"
+
+# $ docker build -t shusan_hatsugen_db_main .
+
+services:
+  ###################
+  # Database
+  ###################
+  shusan_hatsugen_db_mysql:
+    platform: linux/x86_64
+    # Apple Silicon対応
+    image: mysql:8.0
+    networks:
+      - shusan_hatsugen_db_net
+    volumes:
+      - type: volume
+        source: shusan_hatsugen_db_mysql_storage
+        target: /var/lib/mysql
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_general_ci"
+    environment:
+      MYSQL_DATABASE: shusan_hatsugen_db
+      MYSQL_USER: shusan_hatsugen_db
+      MYSQL_PASSWORD: test
+      MYSQL_ROOT_PASSWORD: test
+    healthcheck:
+      test: mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD
+      timeout: 3s
+      retries: 10
+
+  ###################
+  # phpmyadmin
+  ###################
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    depends_on:
+      shusan_hatsugen_db_mysql:
+        condition: service_healthy
+    ports:
+      - 80:80
+    networks:
+      - shusan_hatsugen_db_net
+    environment:
+      PMA_ARBITRARY: 1
+      PMA_HOST: shusan_hatsugen_db_mysql
+      PMA_PORT: 3306
+      PMA_USER: shusan_hatsugen_db
+      PMA_PASSWORD: test
+
+  ###################
+  # main
+  ###################
+  shusan_hatsugen_db_main:
+    depends_on:
+      shusan_hatsugen_db_mysql:
+        condition: service_healthy
+    image: shusan_hatsugen_db_main
+    entrypoint: [ "python" ]
+    user: "app"
+    command: [ "main.py" ]
+    networks:
+      - shusan_hatsugen_db_net
+    volumes:
+      - type: bind
+        source: .
+        target: /usr/src/
+      - type: volume
+        source: shusan_hatsugen_db_server_pip_lib
+        target: /usr/local/lib/python3.10/site-packages
+
+volumes:
+  shusan_hatsugen_db_mysql_storage:
+  shusan_hatsugen_db_server_pip_lib:
+
+
+networks:
+  shusan_hatsugen_db_net:

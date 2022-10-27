@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "shusan-hatsugen-db"
+version = "0.1.0"
+description = ""
+authors = ["Tori Takashi <tori.toutoshi@gmail.com>"]
+readme = "README.md"
+packages = [{include = "shusan_hatsugen_db"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pytest = "^7.2.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
