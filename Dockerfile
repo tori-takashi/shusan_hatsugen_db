@@ -32,8 +32,6 @@ COPY --chown=app:app poetry.lock .
 
 # poetryでライブラリをインストール
 RUN poetry install --no-root
-
-USER app
 RUN poetry config virtualenvs.create false
 
 CMD ["python", "main.py"]

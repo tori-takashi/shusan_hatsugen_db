@@ -15,16 +15,6 @@
 	// Uncomment to use the Docker CLI from inside the container. See https://aka.ms/vscode-remote/samples/docker-from-docker.
 	// "mounts": [ "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind" ],
 	// Uncomment to connect as a non-root user if you've added one. See https://aka.ms/vscode-remote/containers/non-root.
-	// "remoteUser": "vscode"
-	"extensions": [
-		"ms-python.python",
-		"ms-python.vscode-pylance",
-		"vscodevim.vim",
-		"mosapride.zenkaku",
-		"zainchen.json",
-		"mohsen1.prettify-json"
-	],
-	"settings": {
-		"python.defaultInterpreterPath": "/usr/local/bin/python"
-	}
+	"postCreateCommand": "poetry install",
+	"remoteUser": "app"
 }
