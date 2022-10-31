@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 from time import sleep
 from pprint import pprint
-from datetime import timedelta
 import requests
 import bs4
 from bs4 import BeautifulSoup
@@ -186,7 +185,8 @@ class MeetingDetailsDownloader:
 
 
 class MeetingInfo:
-    def __init__(self, meeting_summary: MeetingSearchResult, meeting_details: MeetingDetails):
+    def __init__(self, meeting_date: date, meeting_summary: MeetingSearchResult, meeting_details: MeetingDetails):
+        self.meeting_date = meeting_date
         self.meeting_summary = meeting_summary
         self.meeting_details = meeting_details
         self.meeting_info_dict = {
@@ -210,23 +210,43 @@ class MeetingInfo:
             } for speaker_time in self.meeting_details.speaker_time]
         }
 
+    def to_row_dict(self):
+        info_dict_list = []
+        for speaker_time in self.meeting_details.speaker_time:
+            row = {
+                "meeting_name": self.meeting_summary.meeting_name,
+                "date": self.meeting_date,
+                "name": speaker_time.name,
+                "attributes": ", ".join(speaker_time.attributes),
+                "time_min": int(speaker_time.speak_time.seconds / 60),
+                "topics": ",".join(self.meeting_details.topics)
+            }
+            info_dict_list.append(row)
+        return info_dict_list
+
 
 class MeetingDownloader:
     def __init__(self, meeting_date):
         search_results_downloader = MeetingSearchDownloader(meeting_date)
         meeting_search_results = search_results_downloader.get_meeting_search_results()
-        self.meetings = [MeetingInfo(meeting_summary, meeting_summary.get_meeting_details()).meeting_info_dict
-                         for meeting_summary in meeting_search_results]
+        self.meetings: list[MeetingInfo] = [MeetingInfo(meeting_date, meeting_summary, meeting_summary.get_meeting_details())
+                                            for meeting_summary in meeting_search_results]
 
 
-meeting_start_date = date(2022, 1, 24)
+meeting_start_date = date(2022, 10, 13)
 meetings = {}
+meetings_row_dict_list = []
 for i in range(1):
     meeting_date = meeting_start_date + timedelta(days=i)
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
     meeting_info = MeetingDownloader(meeting_date).meetings
-    meetings[meeting_date] = meeting_info
     pprint(meeting_info)
+
+    meetings_row_dicts = [meeting.to_row_dict() for meeting in meeting_info]
+    pprint(meetings_row_dicts)
+
+    meetings[meeting_date] = meeting_info
+    meetings_row_dict_list.extend(meetings_row_dicts)
     sleep(1)
 
-pprint(meetings)
+pprint(meetings_row_dict_list)
