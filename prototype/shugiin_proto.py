@@ -234,10 +234,10 @@ class MeetingDownloader:
                                             for meeting_summary in meeting_search_results]
 
 
-meeting_start_date = date(2022, 10, 13)
+meeting_start_date = date(2022, 10, 1)
 meetings = {}
 meetings_row_dict_list = []
-for i in range(1):
+for i in range((date.today() - meeting_start_date).days):
     meeting_date = meeting_start_date + timedelta(days=i)
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
     meeting_info = MeetingDownloader(meeting_date).meetings
@@ -250,7 +250,5 @@ for i in range(1):
     meetings[meeting_date] = meeting_info
     sleep(1)
 
-pprint(meetings_row_dict_list)
 meeting_df = pd.DataFrame(meetings_row_dict_list)
-pprint(meeting_df)
 meeting_df.to_excel("test.xlsx")
