@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from time import sleep
 from pprint import pprint
+from turtle import title
 import requests
 import bs4
 from bs4 import BeautifulSoup, ResultSet
@@ -119,8 +120,7 @@ class MeetingDetailsPage:
 
     def __parse_topic_rows(self):
         title_eliminated = self.rows_topics[1:-1]
-        return [topic_row.select_one(
-            'td[width="595"]').text for topic_row in title_eliminated]
+        return [topic_row.text.strip() for topic_row in title_eliminated]
 
     def __get_responder_header_tr(self):
         responders_header_elm = self.speakers_time_table_with_responder_ministers.find(
@@ -163,12 +163,10 @@ class MeetingDetailsPage:
         return speakers_list
 
     def get_meeting_details(self) -> MeetingDetails:
-        topics_elm = self.topics_table.select('td[width="595"]')
-        topics = [Topic(topic_elm) for topic_elm in topics_elm]
         speakers_elm = self.speakers_time_table_with_responder_ministers.select(
             'td[width="380"] a')
         speakers = [Speaker(speaker_elm) for speaker_elm in speakers_elm]
-        return MeetingDetails(topics, speakers)
+        return MeetingDetails(self.topics_list, speakers)
 
 
 class MeetingDetailsDownloader:
@@ -200,7 +198,7 @@ class MeetingInfo:
 
     def details_dict(self):
         return {
-            "topics": [topic.title for topic in self.meeting_details.topics],
+            "topics": self.meeting_details.topics,
             "speakers": [{speaker.name: speaker.attributes} for speaker in self.meeting_details.speakers]
         }
 
