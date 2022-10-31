@@ -241,13 +241,16 @@ for i in range(1):
     meeting_date = meeting_start_date + timedelta(days=i)
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
     meeting_info = MeetingDownloader(meeting_date).meetings
-    pprint(meeting_info)
 
     meetings_row_dicts = [meeting.to_row_dict() for meeting in meeting_info]
-    pprint(meetings_row_dicts)
+    for meeting in meeting_info:
+        for row_dict in meeting.to_row_dict():
+            meetings_row_dict_list.append(row_dict)
 
     meetings[meeting_date] = meeting_info
-    meetings_row_dict_list.extend(meetings_row_dicts)
     sleep(1)
 
 pprint(meetings_row_dict_list)
+meeting_df = pd.DataFrame(meetings_row_dict_list)
+pprint(meeting_df)
+meeting_df.to_excel("test.xlsx")
