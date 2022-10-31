@@ -27,6 +27,7 @@ class MeetingSearchResult:
         return URL_BASE + re.sub("'", "", re.search(url_filter, href).group())
 
     def get_meeting_details(self):
+        pprint(self.meeting_name)
         details_downloader = MeetingDetailsDownloader(self)
         return details_downloader.meeting_details.get_meeting_details()
 
@@ -87,11 +88,15 @@ class MeetingDetailsPage:
         self.tables = self.__get_tables()
         self.topics_table = self.__get_topics_table()
         self.speakers_table = self.__get_speakers_list_table()
-        self.speakers_time_table = self.__get_speaker_time_list_table()
+        self.speakers_time_table_with_responder_ministers = self.__get_speaker_time_list_table()
 
         self.rows_topics = self.__get_rows(self.topics_table)
         self.topics_list = self.__parse_topic_rows()
-        pprint(self.topics_list)
+
+        self.rows_speakers_time_table_with_responder_ministers = self.__get_rows(
+            self.speakers_time_table_with_responder_ministers)
+        self.speaker_time_list = self.__parse_speaker_time_table_rows()
+        pprint(self.speaker_time_list)
 
     def __get_tables(self):
         tables = self.meeting_details_page_data.select(
@@ -105,23 +110,62 @@ class MeetingDetailsPage:
         return self.tables[1]
 
     def __get_speaker_time_list_table(self):
-        return self.tables[2]
+        speaker_time_with_responder_ministers = self.tables[2]
+        return speaker_time_with_responder_ministers
 
     def __get_rows(self, table):
         rows = table.select('tr')
         return rows
 
     def __parse_topic_rows(self):
-        title_eliminated = self.rows_topics[1:]
-        topic_title_rows = [topic_row.select_one('td[width="595"]') for topic_row in title_eliminated]
-        topic_title_list = [topic_title_row for topic_title_row in topic_title_rows]
-        pprint(topic_title_list)
-        return topic_title_list
+        title_eliminated = self.rows_topics[1:-1]
+        return [topic_row.select_one(
+            'td[width="595"]').text for topic_row in title_eliminated]
+
+    def __get_responder_header_tr(self):
+        responders_header_elm = self.speakers_time_table_with_responder_ministers.find(
+            text="答弁者等")
+        if (responders_header_elm):
+            return responders_header_elm.parent.parent
+
+    def __get_ministers_header_tr(self):
+        ministers_header_elm = self.speakers_time_table_with_responder_ministers.find(
+            text="大臣等（建制順）：")
+        if ministers_header_elm:
+            return ministers_header_elm.parent.parent.parent
+
+    def __parse_speaker_time_table_rows(self):
+        title_eliminated = self.rows_speakers_time_table_with_responder_ministers[1:]
+
+        ministers_header_elm = self.__get_ministers_header_tr()
+        responders_header_elm = self.__get_responder_header_tr()
+
+        if (ministers_header_elm):
+            minister_header_index = title_eliminated.index(
+                ministers_header_elm)
+            title_eliminated = title_eliminated[:minister_header_index]
+
+        if (responders_header_elm):
+            responder_header_index = title_eliminated.index(
+                responders_header_elm)
+            title_eliminated = title_eliminated[:responder_header_index]
+
+        if (len(title_eliminated) > 1):
+            title_eliminated = title_eliminated[:-1]
+
+        speakers_list = [
+            {
+                "name": speaker_time.select_one('td[width="380"]').text.strip(),
+                "start_at": speaker_time.select('td[width="100"]')[0].text.strip(),
+                "time": speaker_time.select('td[width="100"]')[1].text.strip()
+            } for speaker_time in title_eliminated]
+
+        return speakers_list
 
     def get_meeting_details(self) -> MeetingDetails:
         topics_elm = self.topics_table.select('td[width="595"]')
         topics = [Topic(topic_elm) for topic_elm in topics_elm]
-        speakers_elm = self.speakers_time_table.select(
+        speakers_elm = self.speakers_time_table_with_responder_ministers.select(
             'td[width="380"] a')
         speakers = [Speaker(speaker_elm) for speaker_elm in speakers_elm]
         return MeetingDetails(topics, speakers)
@@ -131,7 +175,8 @@ class MeetingDetailsDownloader:
     def __init__(self, meeting_search_result: MeetingSearchResult):
         self.__meeting_details_page_data = self.__get_meeting_details_page(
             meeting_search_result.meeting_detail_url)
-        self.meeting_details = MeetingDetailsPage(self.__meeting_details_page_data)
+        self.meeting_details = MeetingDetailsPage(
+            self.__meeting_details_page_data)
 
     def __get_meeting_details_page(self, meeting_detail_url: str) -> BeautifulSoup:
         meeting_details_page_response = requests.get(meeting_detail_url)
