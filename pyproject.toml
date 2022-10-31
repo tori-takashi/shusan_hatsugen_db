@@ -16,6 +16,7 @@ pathlib = "^1.0.1"
 freezegun = "^1.2.2"
 vcrpy = "^4.2.1"
 pytest-recording = "^0.12.1"
+beautifulsoup4 = "^4.11.1"
 
 [build-system]
 requires = ["poetry-core"]
