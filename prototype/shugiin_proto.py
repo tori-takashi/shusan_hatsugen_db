@@ -3,7 +3,7 @@ from time import sleep
 from pprint import pprint
 import requests
 import bs4
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, ResultSet
 import re
 
 # https://www.shugiintv.go.jp/jp/index.php?ex=VL&u_day=20210825
@@ -28,7 +28,7 @@ class MeetingSearchResult:
 
     def get_meeting_details(self):
         details_downloader = MeetingDetailsDownloader(self)
-        return details_downloader.get_meeting_details()
+        return details_downloader.meeting_details.get_meeting_details()
 
 
 class MeetingSearchDownloader:
@@ -81,18 +81,17 @@ class MeetingDetails:
         self.speakers = speakers
 
 
-class MeetingDetailsDownloader:
-    def __init__(self, meeting_search_result: MeetingSearchResult):
-        self.meeting_details_page_data = self.__get_meeting_details_page(
-            meeting_search_result.meeting_detail_url)
+class MeetingDetailsPage:
+    def __init__(self, meeting_details_page_data: BeautifulSoup):
+        self.meeting_details_page_data = meeting_details_page_data
         self.tables = self.__get_tables()
         self.topics_table = self.__get_topics_table()
         self.speakers_table = self.__get_speakers_list_table()
         self.speakers_time_table = self.__get_speaker_time_list_table()
 
-    def __get_meeting_details_page(self, meeting_detail_url: str) -> BeautifulSoup:
-        meeting_details_page_response = requests.get(meeting_detail_url)
-        return BeautifulSoup(meeting_details_page_response.content, "html.parser")
+        self.rows_topics = self.__get_rows(self.topics_table)
+        self.topics_list = self.__parse_topic_rows()
+        pprint(self.topics_list)
 
     def __get_tables(self):
         tables = self.meeting_details_page_data.select(
@@ -108,6 +107,17 @@ class MeetingDetailsDownloader:
     def __get_speaker_time_list_table(self):
         return self.tables[2]
 
+    def __get_rows(self, table):
+        rows = table.select('tr')
+        return rows
+
+    def __parse_topic_rows(self):
+        title_eliminated = self.rows_topics[1:]
+        topic_title_rows = [topic_row.select_one('td[width="595"]') for topic_row in title_eliminated]
+        topic_title_list = [topic_title_row for topic_title_row in topic_title_rows]
+        pprint(topic_title_list)
+        return topic_title_list
+
     def get_meeting_details(self) -> MeetingDetails:
         topics_elm = self.topics_table.select('td[width="595"]')
         topics = [Topic(topic_elm) for topic_elm in topics_elm]
@@ -115,6 +125,17 @@ class MeetingDetailsDownloader:
             'td[width="380"] a')
         speakers = [Speaker(speaker_elm) for speaker_elm in speakers_elm]
         return MeetingDetails(topics, speakers)
+
+
+class MeetingDetailsDownloader:
+    def __init__(self, meeting_search_result: MeetingSearchResult):
+        self.__meeting_details_page_data = self.__get_meeting_details_page(
+            meeting_search_result.meeting_detail_url)
+        self.meeting_details = MeetingDetailsPage(self.__meeting_details_page_data)
+
+    def __get_meeting_details_page(self, meeting_detail_url: str) -> BeautifulSoup:
+        meeting_details_page_response = requests.get(meeting_detail_url)
+        return BeautifulSoup(meeting_details_page_response.content, "html.parser")
 
 
 class MeetingInfo:
@@ -147,9 +168,9 @@ class MeetingDownloader:
                          for meeting_summary in meeting_search_results]
 
 
-meeting_start_date = date(2022, 10, 17)
+meeting_start_date = date(2022, 10, 13)
 meetings = {}
-for i in range(3):
+for i in range(1):
     meeting_date = meeting_start_date + timedelta(days=i)
     meetings[meeting_date] = MeetingDownloader(meeting_date).meetings
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
