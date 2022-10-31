@@ -1,10 +1,10 @@
 from datetime import date, timedelta
 from time import sleep
 from pprint import pprint
-from turtle import title
+from datetime import timedelta
 import requests
 import bs4
-from bs4 import BeautifulSoup, ResultSet
+from bs4 import BeautifulSoup
 import re
 
 # https://www.shugiintv.go.jp/jp/index.php?ex=VL&u_day=20210825
@@ -28,7 +28,6 @@ class MeetingSearchResult:
         return URL_BASE + re.sub("'", "", re.search(url_filter, href).group())
 
     def get_meeting_details(self):
-        pprint(self.meeting_name)
         details_downloader = MeetingDetailsDownloader(self)
         return details_downloader.meeting_details.get_meeting_details()
 
@@ -55,32 +54,39 @@ class MeetingSearchDownloader:
         return [MeetingSearchResult(result_elm) for result_elm in search_results]
 
 
-class Topic:
-    def __init__(self, topic_elm: bs4.element.Tag):
-        self.title = self.__get_title(topic_elm)
+class SpeakerTime:
+    def __init__(self, speaker_time: dict):
+        self.name = self.__get_name(speaker_time["name"])
+        self.attributes = self.__get_speaker_attributes(speaker_time["name"])
+        self.speak_time = self.__get_speak_time(speaker_time["time"])
 
-    def __get_title(self, topic_elm):
-        return topic_elm.text
+    def __get_name(self, speaker_name_attr: str):
+        return re.sub("\(.+?\)", "", speaker_name_attr)
 
-
-class Speaker:
-    def __init__(self, speaker_elm: bs4.element.Tag):
-        self.name = self.__get_name(speaker_elm)
-        self.attributes = self.__get_attributes(speaker_elm)
-
-    def __get_name(self, speaker_elm):
-        return re.sub("\(.+?\)", "", speaker_elm.text)
-
-    def __get_attributes(self, speaker_elm):
+    def __get_speaker_attributes(self, speaker_name_attr: str):
         attributes_str = re.search(
-            "(?<=\().+?(?=\))", speaker_elm.text).group()
+            "(?<=\().+?(?=\))", speaker_name_attr).group()
         return attributes_str.split('・')
+
+    def __get_speak_time(self, speak_time: str):
+        hour_min_text_list = speak_time.split()
+        # 表記はn時間 n分とn分だけなので
+        if (len(hour_min_text_list) > 1):
+            hours_text = hour_min_text_list[0]
+            hours = int(re.sub(r"\D", "", hours_text))
+            min_text = hour_min_text_list[1]
+            minutes = int(re.sub(r"\D", "", min_text))
+            return timedelta(hours=hours, minutes=minutes)
+        else:
+            min_text = hour_min_text_list[0]
+            minutes = int(re.sub(r"\D", "", min_text))
+            return timedelta(minutes=minutes)
 
 
 class MeetingDetails:
-    def __init__(self, topics: list[Topic], speakers: list[Speaker]):
+    def __init__(self, topics: list[str], speaker_time: list[SpeakerTime]):
         self.topics = topics
-        self.speakers = speakers
+        self.speaker_time = speaker_time
 
 
 class MeetingDetailsPage:
@@ -97,7 +103,6 @@ class MeetingDetailsPage:
         self.rows_speakers_time_table_with_responder_ministers = self.__get_rows(
             self.speakers_time_table_with_responder_ministers)
         self.speaker_time_list = self.__parse_speaker_time_table_rows()
-        pprint(self.speaker_time_list)
 
     def __get_tables(self):
         tables = self.meeting_details_page_data.select(
@@ -163,10 +168,9 @@ class MeetingDetailsPage:
         return speakers_list
 
     def get_meeting_details(self) -> MeetingDetails:
-        speakers_elm = self.speakers_time_table_with_responder_ministers.select(
-            'td[width="380"] a')
-        speakers = [Speaker(speaker_elm) for speaker_elm in speakers_elm]
-        return MeetingDetails(self.topics_list, speakers)
+        speaker_times = [SpeakerTime(speaker_time_dict)
+                         for speaker_time_dict in self.speaker_time_list]
+        return MeetingDetails(self.topics_list, speaker_times)
 
 
 class MeetingDetailsDownloader:
@@ -199,7 +203,11 @@ class MeetingInfo:
     def details_dict(self):
         return {
             "topics": self.meeting_details.topics,
-            "speakers": [{speaker.name: speaker.attributes} for speaker in self.meeting_details.speakers]
+            "speakers": [{
+                "name": speaker_time.name,
+                "attributes": speaker_time.attributes,
+                "time": str(int(speaker_time.speak_time.seconds / 60)) + "分"
+            } for speaker_time in self.meeting_details.speaker_time]
         }
 
 
@@ -211,12 +219,14 @@ class MeetingDownloader:
                          for meeting_summary in meeting_search_results]
 
 
-meeting_start_date = date(2022, 10, 13)
+meeting_start_date = date(2022, 1, 24)
 meetings = {}
 for i in range(1):
     meeting_date = meeting_start_date + timedelta(days=i)
-    meetings[meeting_date] = MeetingDownloader(meeting_date).meetings
     print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
+    meeting_info = MeetingDownloader(meeting_date).meetings
+    meetings[meeting_date] = meeting_info
+    pprint(meeting_info)
     sleep(1)
 
 pprint(meetings)
