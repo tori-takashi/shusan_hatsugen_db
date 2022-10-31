@@ -5,6 +5,7 @@ import requests
 import bs4
 from bs4 import BeautifulSoup
 import re
+import pandas as pd
 
 # https://www.shugiintv.go.jp/jp/index.php?ex=VL&u_day=20210825
 # この中に日毎の本会議・委員会のリンクが入っているのでそれをスクレイピングする
