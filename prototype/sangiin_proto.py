@@ -6,14 +6,13 @@ import bs4
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
-from sqlalchemy import desc
 
 # https://www.webtv.sangiin.go.jp/webtv/detail.php?sid=6637
 # 2022年度最初の国会
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 #SID_BASE = 6637
-SID_BASE = 6674
+SID_BASE = 7037
 
 
 def get_content_summary(detail_contents):
@@ -40,7 +39,7 @@ def get_speaker_attributes(speaker_name_attr: str):
 
 meeting_info_dict_list = []
 
-for i in range(3):
+for i in range(50):
     url = URL_BASE + str(SID_BASE + i)
     meeting_page_response = requests.get(url)
     pprint(url + " を取得中")
@@ -92,9 +91,5 @@ for i in range(3):
         pprint("not found")
     sleep(1)
 
-pprint(meeting_info_dict_list)
-
 meeting_df = pd.DataFrame(meeting_info_dict_list)
-pprint(meeting_df)
-
 meeting_df.to_excel("sangiin.xlsx")
