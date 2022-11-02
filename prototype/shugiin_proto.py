@@ -234,21 +234,37 @@ class MeetingDownloader:
                                             for meeting_summary in meeting_search_results]
 
 
+class MeetingsDownloader:
+    def __init__(self, meeting_start_date):
+        self.meeting_start_date = meeting_start_date
+        self.meetings = {}
+        self.meetings_row_dict_list = []
+        self.download()
+        self.meetings_df = pd.DataFrame(self.meetings_row_dict_list)
+
+    def download(self):
+        for i in range((date.today() - self.meeting_start_date).days):
+            meeting_date = self.meeting_start_date + timedelta(days=i)
+            print(
+                f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
+            meeting_info = MeetingDownloader(meeting_date).meetings
+
+            self.__set_meetings_info(meeting_date, meeting_info)
+            self.__set_meetings_row_dict_list(meeting_info)
+
+            sleep(1)
+
+    def __set_meetings_info(self, meeting_date: date, meeting_info: list[MeetingInfo]):
+        self.meetings_row_dicts = [meeting.to_row_dict()
+                                   for meeting in meeting_info]
+        self.meetings[meeting_date] = meeting_info
+
+    def __set_meetings_row_dict_list(self, meeting_info: list[MeetingInfo]):
+        for meeting in meeting_info:
+            for row_dict in meeting.to_row_dict():
+                self.meetings_row_dict_list.append(row_dict)
+
+
 meeting_start_date = date(2022, 10, 1)
-meetings = {}
-meetings_row_dict_list = []
-for i in range((date.today() - meeting_start_date).days):
-    meeting_date = meeting_start_date + timedelta(days=i)
-    print(f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
-    meeting_info = MeetingDownloader(meeting_date).meetings
-
-    meetings_row_dicts = [meeting.to_row_dict() for meeting in meeting_info]
-    for meeting in meeting_info:
-        for row_dict in meeting.to_row_dict():
-            meetings_row_dict_list.append(row_dict)
-
-    meetings[meeting_date] = meeting_info
-    sleep(1)
-
-meeting_df = pd.DataFrame(meetings_row_dict_list)
-meeting_df.to_excel("shugiin.xlsx")
+meetings_downloader = MeetingsDownloader(meeting_start_date)
+meetings_downloader.meetings_df.to_excel("shugiin.xlsx")
