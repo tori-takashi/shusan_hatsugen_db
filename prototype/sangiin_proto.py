@@ -16,7 +16,7 @@ import pandas as pd
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
-SID_END = 6700
+SID_END = 6639
 
 
 class MeetingInfo:
@@ -118,7 +118,6 @@ class MeetingInfoPage:
     def __get_meeting_contents(self):
         description = self.__detail_contents.find(name="span")
         if (description):
-            # pprint(description.get_text().split('\u3000'))
             return "".join(description.get_text().split())
         else:
             pprint("description not found")
@@ -212,22 +211,53 @@ downloader = MeetingsDownloader()
 meetings_df = downloader.meetings_df
 meetings_df.to_excel("sangiin_meetings.xlsx")
 
-url = "https://www.sangiin.go.jp/japanese/joho1/kousei/giin/200/giin.htm"
-upper_house_members_response = requests.get(url)
-upper_house_members_bs = BeautifulSoup(
-    upper_house_members_response.content, 'html.parser')
-upper_house_members_main_contents = upper_house_members_bs.find(
-    name="div", id="ContentsBox")
-upper_house_members_table = upper_house_members_main_contents.find_all(name="table")[
-    1]
-upper_house_member_rows = upper_house_members_table.find_all(name="tr")[1:]
-upper_house_member_row = upper_house_member_rows[0]
-upper_house_member_row_contents = upper_house_member_row.find_all(name="td")
+class UpperHouseMember:
+    def __init__(self, name, name_kana, party):
+        self.name = name
+        self.name_kana = name_kana
+        self.party = party
 
-name_raw = upper_house_member_row_contents[0].text
-name = "".join(name_raw.split())
-name_kana_raw = upper_house_member_row_contents[1].text
-name_kana = name_kana_raw.replace('\u3000', " ")
-party = upper_house_member_row_contents[2].text
+class UpperHouseMembersPage:
+    def __init__(self, upper_house_members_bs):
+        self.upper_house_members_bs = upper_house_members_bs
+        self.__main_contents = self.upper_house_members_bs.find(name="div", id="ContentsBox")
+        self.__members_table = self.__main_contents.find_all(name="table")[1]
+        self.__member_rows = self.__members_table.find_all(name="tr")[1:]
+        self.members = self.__get_upper_house_members()
 
-print(name, name_kana, party)
+    def __get_upper_house_members(self) -> list[UpperHouseMember]:
+        members_list = []
+        for member_row in self.__member_rows:
+            upper_house_member_row_contents = member_row.find_all(name="td")
+            name_raw = upper_house_member_row_contents[0].text
+            name = "".join(name_raw.split())
+            name_kana_raw = upper_house_member_row_contents[1].text
+            name_kana = name_kana_raw.replace('\u3000', " ")
+            party = upper_house_member_row_contents[2].text
+
+            if ('[' in name):
+                current_name, past_name = name.replace("]", "").split('[')
+                members_list.append(UpperHouseMember(current_name, name_kana, party))
+                members_list.append(UpperHouseMember(past_name, name_kana, party))
+            else:
+                members_list.append(UpperHouseMember(name, name_kana, party))
+
+        return members_list
+        
+class UpperHouseMembersDownloader:
+    def __init__(self):
+        url = "https://www.sangiin.go.jp/japanese/joho1/kousei/giin/200/giin.htm"
+        upper_house_members_response = requests.get(url)
+        upper_house_members_bs = BeautifulSoup(
+            upper_house_members_response.content, 'html.parser')
+        self.upper_house_members_page = UpperHouseMembersPage(upper_house_members_bs)
+        self.upper_house_dict_list = self.__get_upper_house_member_dict_list()
+
+    def __get_upper_house_member_dict_list(self) -> list[dict]:
+        return [{
+            "name": member.name,
+            "name_kana": member.name_kana,
+        } for member in self.upper_house_members_page.members]
+
+upper_house_members_downloader = UpperHouseMembersDownloader()
+pprint(upper_house_members_downloader.upper_house_dict_list)
