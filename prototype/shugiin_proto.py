@@ -10,6 +10,16 @@ import pandas as pd
 # https://www.shugiintv.go.jp/jp/index.php?ex=VL&u_day=20210825
 # この中に日毎の本会議・委員会のリンクが入っているのでそれをスクレイピングする
 
+MEETINGS_URL_BASE = "https://www.shugiintv.go.jp/jp/"
+MEETINGS_PARAM_BASE = "ex=VL"
+
+MEETINGS_CSV_FILE_NAME = "shugiin.csv"
+SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME = "shugiin_diet_members.csv"
+
+OUTPUT_FILE_NAME = "shugiin.xlsx"
+
+# 会議
+
 
 class MeetingSearchResult:
     def __init__(self, result_elm: bs4.element.Tag):
@@ -22,7 +32,7 @@ class MeetingSearchResult:
     def __get_meeting_detail_url(self, result_elm) -> str:
         url_filter = "\'.*?\'"
         href = result_elm.get('href')
-        return URL_BASE + re.sub("'", "", re.search(url_filter, href).group())
+        return MEETINGS_URL_BASE + re.sub("'", "", re.search(url_filter, href).group())
 
     def get_meeting_details(self):
         details_downloader = MeetingDetailsDownloader(self)
@@ -33,8 +43,6 @@ class MeetingSearchDownloader:
     def __init__(self, meeting_date):
         self.meetings_search_page_data = self.__get_meetings_by_date(
             meeting_date)
-        self.__URL_BASE = "https://www.shugiintv.go.jp/jp/"
-        self.__PARAM_BASE = "ex=VL"
 
     def __get_meetings_by_date(self, date: date) -> BeautifulSoup:
         return self.__get_meetings_page_by_ymd(date.year, date.month, date.day)
@@ -44,7 +52,7 @@ class MeetingSearchDownloader:
         month_str = str(month).zfill(2)
         day_str = str(day).zfill(2)
         meetings_page_response = requests.get(
-            self.__URL_BASE + "index.php?" + self.__PARAM_BASE + "&u_day=" + year_str + month_str + day_str)
+            MEETINGS_URL_BASE + "index.php?" + MEETINGS_PARAM_BASE + "&u_day=" + year_str + month_str + day_str)
         return BeautifulSoup(meetings_page_response.content, "html.parser")
 
     def get_meeting_search_results(self) -> list[MeetingSearchResult]:
@@ -234,15 +242,16 @@ class MeetingDownloader:
 
 
 class MeetingsDownloader:
-    def __init__(self, meeting_start_date):
+    def __init__(self, meeting_start_date, meeting_end_date):
         self.meeting_start_date = meeting_start_date
+        self.meeting_end_date = meeting_end_date
         self.meetings = {}
         self.meetings_row_dict_list = []
         self.download()
         self.meetings_df = pd.DataFrame(self.meetings_row_dict_list)
 
     def download(self):
-        for i in range((date.today() - self.meeting_start_date).days):
+        for i in range((self.meeting_end_date - self.meeting_start_date).days+1):
             meeting_date = self.meeting_start_date + timedelta(days=i)
             print(
                 f"{meeting_date.year}年{meeting_date.month}月{meeting_date.day}日の情報を取得中")
@@ -264,10 +273,7 @@ class MeetingsDownloader:
                 self.meetings_row_dict_list.append(row_dict)
 
 
-#meeting_start_date = date(2022, 10, 28)
-#meetings_downloader = MeetingsDownloader(meeting_start_date)
-#meetings_df = meetings_downloader.meetings_df.to_excel("shugiin.xlsx")
-
+# 衆議院議員
 
 class DietMember:
     def __init__(self, name_kanji, name_kana, party):
@@ -346,6 +352,73 @@ class DietMemberDownloader:
                                   for diet_member in self.diet_members]
         return pd.DataFrame(diet_members_dict_list)
 
+# エクセルファイル生成
+
+
+class GenerateExcel:
+    def __init__(self, read_from_files, meetings_df=None, diet_members_df=None):
+        self.read_from_files = read_from_files
+        if (self.read_from_files):
+            self.meetings_df = pd.read_csv(MEETINGS_CSV_FILE_NAME)
+            self.diet_members_df = pd.read_csv(
+                SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME)
+        else:
+            self.meetings_df = meetings_df
+            self.diet_members_df = diet_members_df
+
+    def merge_df(self):
+        return pd.merge(self.meetings_df, self.diet_members_df,
+                        left_on="name", right_on="name_kanji").drop(columns=["name_kanji", "Unnamed: 0_x", "Unnamed: 0_y"])
+
+    def get_blacklist_str(self):
+        return "|".join(self.blacklist)
+
+    def generate(self):
+        self.blacklist = ["委員長", "大臣", "議長", "委員長", "会長", "主査", "長官", "担当"]
+
+        self.merged_master = self.merge_df()
+        self.merged_master = self.merged_master.reindex(
+            columns=['date', 'meeting_name', 'name', 'name_kana', 'party', 'time_min', 'topics', 'attributes'])
+        self.merged_master.rename(columns={
+            "date": "日にち",
+            "meeting_name": "委員会",
+            "name": "議員名",
+            "name_kana": "ふりがな",
+            "party": "政党",
+            "time_min": "時間",
+            "topics": "案件",
+            "attributes": "属性"
+        }, inplace=True)
+        self.merged_master.sort_values(
+            ['日にち', '委員会'], inplace=True)
+        self.merged_master.reset_index(inplace=True, drop=True)
+
+        self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
+            self.get_blacklist_str())]
+        self.filtered_by_blacklist = self.merged_master[self.merged_master["属性"].str.contains(
+            self.get_blacklist_str())]
+
+        self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
+        self.filtered_by_time = self.purified_by_blacklist[~self.purified_by_blacklist["時間"] > 3]
+
+        with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
+            self.purified_by_time.to_excel(writer, sheet_name="最終データ")
+            self.filtered_by_time.to_excel(
+                writer, sheet_name="抽出・ブラックリスト除去済み・1~3分")
+            self.filtered_by_blacklist.to_excel(
+                writer, sheet_name="抽出・ブラックリスト")
+            self.merged_master.to_excel(writer, sheet_name="結合全データ")
+            self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
+            self.diet_members_df.to_excel(writer, sheet_name="元データ・衆議院議員")
+
+
+meeting_start_date = date(2022, 1, 1)
+meeting_end_date = date(2022, 6, 30)
+meetings_downloader = MeetingsDownloader(meeting_start_date, meeting_end_date)
+meetings_df = meetings_downloader.meetings_df
 
 diet_member_downloader = DietMemberDownloader()
-pprint(diet_member_downloader.diet_members_df)
+diet_members_df = diet_member_downloader.diet_members_df
+
+excel_generator = GenerateExcel(
+    read_from_files=False, meetings_df=meetings_df, diet_members_df=diet_members_df)
