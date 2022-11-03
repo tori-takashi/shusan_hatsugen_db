@@ -16,7 +16,7 @@ import pandas as pd
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
-SID_END = 6639
+SID_END = 6700
 
 
 class MeetingInfo:
@@ -174,7 +174,6 @@ class MeetingsDownloader:
     def __get_meeting_info_page(self) -> list[MeetingInfoPage]:
         meeting_info_list = []
         for i in range(SID_END - SID_BEGIN):
-            pprint(i)
             url = URL_BASE + str(SID_BEGIN + i)
             meeting_downloader = MeetingDownloader(url)
             if (meeting_downloader.meeting_info_page):
@@ -211,5 +210,24 @@ class MeetingsDownloader:
 
 downloader = MeetingsDownloader()
 meetings_df = downloader.meetings_df
-meetings_df.to_excel("test.xlsx")
-pprint(meetings_df)
+meetings_df.to_excel("sangiin_meetings.xlsx")
+
+url = "https://www.sangiin.go.jp/japanese/joho1/kousei/giin/200/giin.htm"
+upper_house_members_response = requests.get(url)
+upper_house_members_bs = BeautifulSoup(
+    upper_house_members_response.content, 'html.parser')
+upper_house_members_main_contents = upper_house_members_bs.find(
+    name="div", id="ContentsBox")
+upper_house_members_table = upper_house_members_main_contents.find_all(name="table")[
+    1]
+upper_house_member_rows = upper_house_members_table.find_all(name="tr")[1:]
+upper_house_member_row = upper_house_member_rows[0]
+upper_house_member_row_contents = upper_house_member_row.find_all(name="td")
+
+name_raw = upper_house_member_row_contents[0].text
+name = "".join(name_raw.split())
+name_kana_raw = upper_house_member_row_contents[1].text
+name_kana = name_kana_raw.replace('\u3000', " ")
+party = upper_house_member_row_contents[2].text
+
+print(name, name_kana, party)
