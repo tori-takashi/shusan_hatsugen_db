@@ -10,9 +10,6 @@ import pandas as pd
 # https://www.shugiintv.go.jp/jp/index.php?ex=VL&u_day=20210825
 # この中に日毎の本会議・委員会のリンクが入っているのでそれをスクレイピングする
 
-URL_BASE = "https://www.shugiintv.go.jp/jp/"
-PARAM_BASE = "ex=VL"
-
 
 class MeetingSearchResult:
     def __init__(self, result_elm: bs4.element.Tag):
@@ -36,6 +33,8 @@ class MeetingSearchDownloader:
     def __init__(self, meeting_date):
         self.meetings_search_page_data = self.__get_meetings_by_date(
             meeting_date)
+        self.__URL_BASE = "https://www.shugiintv.go.jp/jp/"
+        self.__PARAM_BASE = "ex=VL"
 
     def __get_meetings_by_date(self, date: date) -> BeautifulSoup:
         return self.__get_meetings_page_by_ymd(date.year, date.month, date.day)
@@ -45,7 +44,7 @@ class MeetingSearchDownloader:
         month_str = str(month).zfill(2)
         day_str = str(day).zfill(2)
         meetings_page_response = requests.get(
-            URL_BASE + "index.php?" + PARAM_BASE + "&u_day=" + year_str + month_str + day_str)
+            self.__URL_BASE + "index.php?" + self.__PARAM_BASE + "&u_day=" + year_str + month_str + day_str)
         return BeautifulSoup(meetings_page_response.content, "html.parser")
 
     def get_meeting_search_results(self) -> list[MeetingSearchResult]:
@@ -265,6 +264,88 @@ class MeetingsDownloader:
                 self.meetings_row_dict_list.append(row_dict)
 
 
-meeting_start_date = date(2022, 10, 1)
-meetings_downloader = MeetingsDownloader(meeting_start_date)
-meetings_downloader.meetings_df.to_excel("shugiin.xlsx")
+#meeting_start_date = date(2022, 10, 28)
+#meetings_downloader = MeetingsDownloader(meeting_start_date)
+#meetings_df = meetings_downloader.meetings_df.to_excel("shugiin.xlsx")
+
+
+class DietMember:
+    def __init__(self, name_kanji, name_kana, party):
+        self.name_kanji = name_kanji
+        self.name_kana = name_kana
+        self.party = party
+
+    def to_dict(self) -> dict:
+        return {
+            "name_kanji": self.name_kanji,
+            "name_kana": self.name_kana,
+            "party": self.party
+        }
+
+
+class DietMembersPage:
+    def __init__(self, diet_members_bs4: BeautifulSoup):
+        self.diet_members_bs4 = diet_members_bs4
+        self.__diet_member_table = self.__get_diet_members_table()
+        self.__diet_member_rows = self.__get_diet_member_rows()
+        self.diet_members = self.__get_diet_members()
+
+    def __get_diet_members_table(self) -> BeautifulSoup:
+        diet_members_tables = self.diet_members_bs4.find(
+            name="div", id='sh1body')
+        return diet_members_tables.find_all(name="table")[1]
+
+    def __get_diet_member_rows(self) -> BeautifulSoup:
+        return self.__diet_member_table.find_all(name="tr")[2:]
+
+    def __get_diet_members(self) -> list[DietMember]:
+        diet_member_list = []
+        for diet_member_row in self.__diet_member_rows:
+            row_elm = diet_member_row.find_all(name="td")
+
+            name_kanji_raw = row_elm[0]
+            name_kanji = "".join(
+                name_kanji_raw.text.split())[:-1]
+            name_kana_raw = row_elm[1]
+            name_kana = " ".join(
+                name_kana_raw.text.split())
+            party_raw = row_elm[2]
+            party = party_raw.text.strip()
+            diet_member_list.append(DietMember(name_kanji, name_kana, party))
+        return diet_member_list
+
+
+class DietMemberDownloader:
+    def __init__(self):
+        self.URL_BASE = "https://www.shugiin.go.jp/internet/itdb_annai.nsf/html/statics/syu/"
+        self.PAGE_NAME = "giin.htm"
+        self.__diet_members_page_list = self.download_page()
+        self.diet_members = self.get_diet_members()
+        self.diet_members_df = self.get_diet_members_df()
+
+    def download_page(self) -> list[DietMembersPage]:
+        diet_members_page_list = []
+        for i in range(1, 11):
+            url = self.URL_BASE + str(i) + self.PAGE_NAME
+            print(url, "の情報を取得中")
+            diet_members_response = requests.get(url)
+            diet_members_bs4 = BeautifulSoup(
+                diet_members_response.content, "html.parser")
+            diet_members_page_list.append(DietMembersPage(diet_members_bs4))
+            sleep(1)
+        return diet_members_page_list
+
+    def get_diet_members(self) -> list[DietMember]:
+        diet_members_list = []
+        for diet_members_page in self.__diet_members_page_list:
+            diet_members_list.extend(diet_members_page.diet_members)
+        return diet_members_list
+
+    def get_diet_members_df(self) -> pd.DataFrame:
+        diet_members_dict_list = [diet_member.to_dict()
+                                  for diet_member in self.diet_members]
+        return pd.DataFrame(diet_members_dict_list)
+
+
+diet_member_downloader = DietMemberDownloader()
+pprint(diet_member_downloader.diet_members_df)
