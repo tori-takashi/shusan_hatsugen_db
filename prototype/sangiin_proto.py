@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from time import sleep
 from pprint import pprint
 from turtle import down
@@ -125,7 +125,9 @@ class MeetingInfoPage:
             return None
 
     def __get_meeting_date(self):
-        return self.__content_summary[0].find(name="dd").get_text().replace("年", "-").replace("月", "-").replace("日", "")
+        time_text = self.__content_summary[0].find(name="dd").get_text()
+        date = datetime.strptime(time_text, '%Y年%m月%d日').date()
+        return date
 
     def __get_meeting_name(self):
         return self.__content_summary[1].find(name="dd").get_text()
@@ -197,7 +199,7 @@ class MeetingsDownloader:
         for meeting_info_page in self.meeting_info_page_list:
             for speach in meeting_info_page.meeting.speaches:
                 meeting_dict_list.append({
-                    "meeting_date": "".join(meeting_info_page.meeting.info.meeting_date),
+                    "meeting_date": meeting_info_page.meeting.info.meeting_date[0],
                     "meeting_name": "".join(meeting_info_page.meeting.info.meeting_name),
                     "meeting_content": meeting_info_page.meeting.info.meeting_content,
                     "name": speach.speaker.name,
@@ -209,4 +211,5 @@ class MeetingsDownloader:
 
 downloader = MeetingsDownloader()
 meetings_df = downloader.meetings_df
+meetings_df.to_excel("test.xlsx")
 pprint(meetings_df)
