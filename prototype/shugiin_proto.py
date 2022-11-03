@@ -13,7 +13,7 @@ import pandas as pd
 MEETINGS_URL_BASE = "https://www.shugiintv.go.jp/jp/"
 MEETINGS_PARAM_BASE = "ex=VL"
 
-MEETINGS_CSV_FILE_NAME = "shugiin.csv"
+MEETINGS_CSV_FILE_NAME = "shugiin_meetings.csv"
 SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME = "shugiin_diet_members.csv"
 
 OUTPUT_FILE_NAME = "shugiin.xlsx"
@@ -260,7 +260,7 @@ class MeetingsDownloader:
             self.__set_meetings_info(meeting_date, meeting_info)
             self.__set_meetings_row_dict_list(meeting_info)
 
-            sleep(1)
+            sleep(0.1)
 
     def __set_meetings_info(self, meeting_date: date, meeting_info: list[MeetingInfo]):
         self.meetings_row_dicts = [meeting.to_row_dict()
@@ -338,7 +338,7 @@ class DietMemberDownloader:
             diet_members_bs4 = BeautifulSoup(
                 diet_members_response.content, "html.parser")
             diet_members_page_list.append(DietMembersPage(diet_members_bs4))
-            sleep(1)
+            sleep(0.1)
         return diet_members_page_list
 
     def get_diet_members(self) -> list[DietMember]:
@@ -412,13 +412,18 @@ class GenerateExcel:
             self.diet_members_df.to_excel(writer, sheet_name="元データ・衆議院議員")
 
 
-meeting_start_date = date(2022, 1, 1)
-meeting_end_date = date(2022, 6, 30)
-meetings_downloader = MeetingsDownloader(meeting_start_date, meeting_end_date)
-meetings_df = meetings_downloader.meetings_df
+#meeting_start_date = date(2022, 1, 1)
+#meeting_end_date = date(2022, 6, 30)
+#meetings_downloader = MeetingsDownloader(meeting_start_date, meeting_end_date)
+#meetings_df = meetings_downloader.meetings_df
+#meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
 
-diet_member_downloader = DietMemberDownloader()
-diet_members_df = diet_member_downloader.diet_members_df
+#diet_member_downloader = DietMemberDownloader()
+#diet_members_df = diet_member_downloader.diet_members_df
+#diet_members_df.to_csv(SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME)
 
-excel_generator = GenerateExcel(
-    read_from_files=False, meetings_df=meetings_df, diet_members_df=diet_members_df)
+#excel_generator = GenerateExcel(
+    #read_from_files=False, meetings_df=meetings_df, diet_members_df=diet_members_df)
+
+excel_generator = GenerateExcel(read_from_files=True)
+excel_generator.generate()

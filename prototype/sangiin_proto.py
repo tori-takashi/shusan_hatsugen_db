@@ -1,9 +1,7 @@
-from datetime import date, timedelta, datetime
+from datetime import datetime
 from time import sleep
 from pprint import pprint
-from turtle import down
 import requests
-import bs4
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
@@ -16,8 +14,12 @@ import pandas as pd
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
-SID_END = 6639
+SID_END = 6978
 
+MEETINGS_CSV_FILE_NAME = "sanngiin_meetings.csv"
+SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
+
+OUTPUT_FILE_NAME = "sangiin.xlsx"
 
 class MeetingInfo:
     def __init__(self, meeting_date, meeting_name: str, meeting_content: str):
@@ -172,7 +174,7 @@ class MeetingsDownloader:
 
     def __get_meeting_info_page(self) -> list[MeetingInfoPage]:
         meeting_info_list = []
-        for i in range(SID_END - SID_BEGIN):
+        for i in range(SID_END - SID_BEGIN + 1):
             url = URL_BASE + str(SID_BEGIN + i)
             meeting_downloader = MeetingDownloader(url)
             if (meeting_downloader.meeting_info_page):
@@ -207,9 +209,9 @@ class MeetingsDownloader:
         return meeting_dict_list
 
 
-downloader = MeetingsDownloader()
-meetings_df = downloader.meetings_df
-meetings_df.to_excel("sangiin_meetings.xlsx")
+#meetings_downloader = MeetingsDownloader()
+#meetings_df = meetings_downloader.meetings_df
+#meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
 
 class UpperHouseMember:
     def __init__(self, name, name_kana, party):
@@ -242,6 +244,12 @@ class UpperHouseMembersPage:
             else:
                 members_list.append(UpperHouseMember(name, name_kana, party))
 
+        # データが古いので手動で対応
+        members_list.append(UpperHouseMember("山崎真之輔", "やまざき しんのすけ", ""))
+        members_list.append(UpperHouseMember("宮口治子", "みやぐち はるこ", ""))
+        members_list.append(UpperHouseMember("羽田次郎", "はた じろう", ""))
+        members_list.append(UpperHouseMember("比嘉奈津美", "ひが なつみ", ""))
+
         return members_list
         
 class UpperHouseMembersDownloader:
@@ -252,6 +260,7 @@ class UpperHouseMembersDownloader:
             upper_house_members_response.content, 'html.parser')
         self.upper_house_members_page = UpperHouseMembersPage(upper_house_members_bs)
         self.upper_house_dict_list = self.__get_upper_house_member_dict_list()
+        self.upper_house_members_df = pd.DataFrame(self.upper_house_dict_list)
 
     def __get_upper_house_member_dict_list(self) -> list[dict]:
         return [{
@@ -260,4 +269,80 @@ class UpperHouseMembersDownloader:
         } for member in self.upper_house_members_page.members]
 
 upper_house_members_downloader = UpperHouseMembersDownloader()
-pprint(upper_house_members_downloader.upper_house_dict_list)
+upper_house_members_downloader.upper_house_members_df.to_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
+
+class GenerateExcel:
+    def __init__(self, read_from_files, meetings_df=None, sangiin_members_df=None):
+        self.read_from_files = read_from_files
+        if (self.read_from_files):
+            self.meetings_df = pd.read_csv(MEETINGS_CSV_FILE_NAME)
+            self.sangiin_members_df = pd.read_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
+        else:
+            self.meetings_df = meetings_df
+            self.sangiin_members_df = sangiin_members_df
+
+
+    def merge_df(self):
+        return pd.merge(self.meetings_df, self.sangiin_members_df,
+                        left_on="name", right_on="name", how='left').drop(columns=["Unnamed: 0_x", "Unnamed: 0_y"])
+
+    def get_blacklist_str(self):
+        return "|".join(self.blacklist)
+
+    def generate(self):
+        #self.blacklist = ["委員長", "大臣", "議長", "委員長", "会長", "主査", "長官", "担当"]
+        self.blacklist = [
+            "委員長",
+            "大臣",
+            "議長",
+            "委員長",
+            "参考人",
+            "総裁",
+            "公述人",
+            "長官",
+            "総長",
+            "局長",
+            "院長",
+            "会長",
+            "衆議院議員"]
+
+        self.merged_master = self.merge_df()
+        self.merged_master = self.merged_master.reindex(
+            columns=['meeting_date', 'meeting_name', 'name', 'name_kana', 'time_min', 'meeting_content', 'attributes'])
+        self.merged_master.rename(columns={
+            "meeting_date": "日にち",
+            "meeting_name": "委員会",
+            "meeting_content": "案件",
+            "name": "議員名",
+            "name_kana": "ふりがな",
+            "attributes": "属性",
+            "time_min": "時間"
+        }, inplace=True)
+        self.merged_master.sort_values(
+            ['日にち', '委員会'], inplace=True)
+        self.merged_master.reset_index(inplace=True, drop=True)
+
+        self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
+            self.get_blacklist_str())]
+        self.filtered_by_blacklist = self.merged_master[self.merged_master["属性"].str.contains(
+            self.get_blacklist_str())]
+
+        self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
+        self.filtered_by_time = self.purified_by_blacklist[~self.purified_by_blacklist["時間"] > 3]
+
+        self.purified_by_meeting_name_black_list = self.purified_by_time[self.purified_by_time["委員会"] != "議院運営委員会"]
+        self.filtered_by_meeting_name_black_list = self.purified_by_time[self.purified_by_time["委員会"] == "議院運営委員会"]
+
+        with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
+            self.purified_by_meeting_name_black_list.to_excel(writer, sheet_name="最終データ")
+            self.filtered_by_blacklist.to_excel(writer, sheet_name="抽出・ブラックリスト")
+            self.filtered_by_time.to_excel(writer, sheet_name="抽出・ブラックリスト除去済み・1~3分")
+            self.filtered_by_meeting_name_black_list.to_excel(writer, sheet_name="抽出・ブラックリスト1~3分除去済み・議院運営委員会")
+            self.merged_master.to_excel(writer, sheet_name="結合全データ")
+            self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
+            self.sangiin_members_df.to_excel(writer, sheet_name="元データ・参議院議員")
+
+excel_generator = GenerateExcel(True)
+pprint(excel_generator.meetings_df)
+pprint(excel_generator.sangiin_members_df)
+excel_generator.generate()
