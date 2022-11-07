@@ -46,11 +46,11 @@ class Meeting:
         self.speaches = self.calculate_speaking_time(speaches)
 
     def calculate_speaking_time(self, speaches: list[Speach]) -> list[Speach]:
-        calculated_speaches = []
+        calculated_speaches: list[Speach] = []
         for speach in speaches:
             if calculated_speaches:
                 speach_duration = speach.time_min - \
-                    calculated_speaches[-1].time_min
+                    sum([calculated_speach.time_min for calculated_speach in calculated_speaches])
                 calculated_speaches.append(
                     Speach(speach.speaker.name, speach.speaker.attributes, speach_duration))
             else:
@@ -134,7 +134,10 @@ class MeetingInfoPage:
         return self.__content_summary[1].find(name="dd").get_text()
 
     def __get_time(self, time_raw):
-        return round(float(time_raw.replace("#", ""))/60)
+        href_time_sec = time_raw.replace("#", "")
+        href_time_min = float(href_time_sec) / 60
+        rounded = round(href_time_min)
+        return rounded
 
     def __get_name(self, speaker_name_attr: str):
         return re.sub("\(.+?\)", "", speaker_name_attr)
@@ -268,8 +271,8 @@ class UpperHouseMembersDownloader:
             "name_kana": member.name_kana,
         } for member in self.upper_house_members_page.members]
 
-upper_house_members_downloader = UpperHouseMembersDownloader()
-upper_house_members_downloader.upper_house_members_df.to_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
+#upper_house_members_downloader = UpperHouseMembersDownloader()
+#upper_house_members_downloader.upper_house_members_df.to_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
 
 class GenerateExcel:
     def __init__(self, read_from_files, meetings_df=None, sangiin_members_df=None):
@@ -319,7 +322,7 @@ class GenerateExcel:
             "time_min": "時間"
         }, inplace=True)
         self.merged_master.sort_values(
-            ['日にち', '委員会'], inplace=True)
+            ['議員名', '日にち'], inplace=True)
         self.merged_master.reset_index(inplace=True, drop=True)
 
         self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
@@ -330,14 +333,10 @@ class GenerateExcel:
         self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
         self.filtered_by_time = self.purified_by_blacklist[~self.purified_by_blacklist["時間"] > 3]
 
-        self.purified_by_meeting_name_black_list = self.purified_by_time[self.purified_by_time["委員会"] != "議院運営委員会"]
-        self.filtered_by_meeting_name_black_list = self.purified_by_time[self.purified_by_time["委員会"] == "議院運営委員会"]
-
         with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
-            self.purified_by_meeting_name_black_list.to_excel(writer, sheet_name="最終データ")
+            self.purified_by_time.to_excel(writer, sheet_name="最終データ")
             self.filtered_by_blacklist.to_excel(writer, sheet_name="抽出・ブラックリスト")
             self.filtered_by_time.to_excel(writer, sheet_name="抽出・ブラックリスト除去済み・1~3分")
-            self.filtered_by_meeting_name_black_list.to_excel(writer, sheet_name="抽出・ブラックリスト1~3分除去済み・議院運営委員会")
             self.merged_master.to_excel(writer, sheet_name="結合全データ")
             self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
             self.sangiin_members_df.to_excel(writer, sheet_name="元データ・参議院議員")
