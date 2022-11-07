@@ -327,6 +327,7 @@ class DietMemberDownloader:
         self.PAGE_NAME = "giin.htm"
         self.__diet_members_page_list = self.download_page()
         self.diet_members = self.get_diet_members()
+        self.add_resigned_diet_members()
         self.diet_members_df = self.get_diet_members_df()
 
     def download_page(self) -> list[DietMembersPage]:
@@ -346,6 +347,14 @@ class DietMemberDownloader:
         for diet_members_page in self.__diet_members_page_list:
             diet_members_list.extend(diet_members_page.diet_members)
         return diet_members_list
+
+    def add_resigned_diet_members(self):
+        self.diet_members.append(DietMember(name_kanji="山田修路", name_kana="やまだ しゅうじ", party="自由民主党"))
+        self.diet_members.append(DietMember(name_kanji="山本太郎", name_kana="やまもと たろう", party="れいわ新選組"))
+        self.diet_members.append(DietMember(name_kanji="吉川赳", name_kana="よしかわ たける", party="自由民主党"))
+        self.diet_members.append(DietMember(name_kanji="藤末健三", name_kana="ふじすえ けんぞう", party="自由民主党"))
+        self.diet_members.append(DietMember(name_kanji="岸本周平", name_kana="きしもと しゅうへい", party="無所属"))
+
 
     def get_diet_members_df(self) -> pd.DataFrame:
         diet_members_dict_list = [diet_member.to_dict()
@@ -368,13 +377,29 @@ class GenerateExcel:
 
     def merge_df(self):
         return pd.merge(self.meetings_df, self.diet_members_df,
-                        left_on="name", right_on="name_kanji").drop(columns=["name_kanji", "Unnamed: 0_x", "Unnamed: 0_y"])
+                        left_on="name", right_on="name_kanji", how='left').drop(columns=["name_kanji", "Unnamed: 0_x", "Unnamed: 0_y"])
 
     def get_blacklist_str(self):
         return "|".join(self.blacklist)
 
     def generate(self):
-        self.blacklist = ["委員長", "大臣", "議長", "委員長", "会長", "主査", "長官", "担当"]
+        self.blacklist = [
+            "委員長",
+            "大臣",
+            "議長",
+            "委員長",
+            "会長",
+            "主査",
+            "長官",
+            "担当",
+            "参考人",
+            "公述人",
+            "局長",
+            "採決",
+            "総裁",
+            "ウクライナ大統領",
+            "日本弁護士連合会",
+            "参議院"]
 
         self.merged_master = self.merge_df()
         self.merged_master = self.merged_master.reindex(
@@ -390,7 +415,7 @@ class GenerateExcel:
             "attributes": "属性"
         }, inplace=True)
         self.merged_master.sort_values(
-            ['日にち', '委員会'], inplace=True)
+            ['議員名', '日にち'], inplace=True)
         self.merged_master.reset_index(inplace=True, drop=True)
 
         self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
