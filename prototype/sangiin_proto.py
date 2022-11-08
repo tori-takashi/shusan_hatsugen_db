@@ -5,11 +5,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
 
 # https://www.webtv.sangiin.go.jp/webtv/detail.php?sid=6637
 # 2022年度最初の国会
@@ -19,7 +14,7 @@ from selenium.common.exceptions import TimeoutException
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
-SID_END = 6637
+SID_END = 6978
 
 MEETINGS_CSV_FILE_NAME = "sanngiin_meetings.csv"
 SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
@@ -27,10 +22,11 @@ SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
 OUTPUT_FILE_NAME = "sangiin.xlsx"
 
 class MeetingInfo:
-    def __init__(self, meeting_date, meeting_name: str, meeting_content: str):
+    def __init__(self, meeting_date, meeting_name: str, meeting_content: str, meeting_duration: timedelta):
         self.meeting_date = meeting_date,
         self.meeting_name = meeting_name,
         self.meeting_content = meeting_content
+        self.meeting_duration = meeting_duration
 
 
 class Speach:
@@ -52,14 +48,15 @@ class Meeting:
 
     def calculate_speaking_time(self, speaches: list[Speach]) -> list[Speach]:
         calculated_speaches: list[Speach] = []
-        for speach in speaches:
-            if calculated_speaches:
-                speach_duration = speach.time_min - \
-                    sum([calculated_speach.time_min for calculated_speach in calculated_speaches])
-                calculated_speaches.append(
-                    Speach(speach.speaker.name, speach.speaker.attributes, speach_duration))
+        for speaker_num, speach in enumerate(speaches):
+            speach_duration = None
+            next_speaker_num = speaker_num + 1
+            if (next_speaker_num < len(speaches)):
+                speach_duration =  speaches[next_speaker_num].time_min - speach.time_min
             else:
-                calculated_speaches.append(speach)
+                speach_duration = self.info.meeting_duration - speaches[speaker_num].time_min
+            calculated_speach = Speach(speach.speaker.name, speach.speaker.attributes, speach_duration)
+            calculated_speaches.append(calculated_speach)
         return calculated_speaches
 
 
@@ -67,10 +64,6 @@ class MeetingInfoPage:
     def __init__(self, url: str, meeting_page_bs: BeautifulSoup):
         self.url = url
         self.meeting_page_bs = meeting_page_bs
-        self.__video_contents = self.__get_video_contents()
-        if (self.__video_contents):
-            self.video_duration_min = self.__get_video_duration_min()
-            pprint(self.video_duration_min)
 
         self.__detail_contents = self.__get_detail_contents()
         self.has_contents = self.__detail_contents is not None
@@ -78,6 +71,8 @@ class MeetingInfoPage:
             self.__content_summary = self.__get_content_summary()
             self.__meeting_date = self.__get_meeting_date()
             self.__meeting_name = self.__get_meeting_name()
+            self.__meeting_duration = self.__get_meeting_duration()            
+
             self.__meeting_contents = self.__get_meeting_contents()
 
             self.__meeting_info = self.__get_meeting_info()
@@ -85,21 +80,12 @@ class MeetingInfoPage:
 
             self.meeting = self.__get_meeting()
 
-    def __get_video_duration_min(self):
-        duration_area = self.__video_contents.find(name="div", class_="vjs-duration-display")
-        duration_list = list(reversed(duration_area.text.replace('Duration Time ', '').split(':')))
-        seconds = int(duration_list[0]) if len(duration_list) > 0 else 0
-        minutes = int(duration_list[1]) if len(duration_list) > 1 else 0
-        hours = int(duration_list[2]) if len(duration_list) > 2 else 0
-        duration_sec = timedelta(hours=hours, minutes=minutes, seconds=seconds).seconds
-        return round(duration_sec / 60)
-
     def __get_meeting(self):
         return Meeting(
             self.__meeting_info, self.__speaches)
 
     def __get_meeting_info(self):
-        return MeetingInfo(self.__meeting_date, self.__meeting_name, self.__meeting_contents)
+        return MeetingInfo(self.__meeting_date, self.__meeting_name, self.__meeting_contents, self.__meeting_duration)
 
     def __get_speaches(self) -> list[Speach]:
         speaches_list = []
@@ -123,14 +109,6 @@ class MeetingInfoPage:
             speaker_name_attr_raw)
 
         return Speach(name, attributes, speaking_time)
-
-    def __get_video_contents(self) -> BeautifulSoup | None:
-        video_contents = self.meeting_page_bs.find(
-            name='div', id="movie-area")
-        if video_contents:
-            return video_contents
-        else:
-            pprint("video content not found.")
 
     def __get_detail_contents(self) -> BeautifulSoup | None:
         detail_contents = self.meeting_page_bs.find(
@@ -160,6 +138,14 @@ class MeetingInfoPage:
     def __get_meeting_name(self):
         return self.__content_summary[1].find(name="dd").get_text()
 
+    def __get_meeting_duration(self):
+        duration_text: str = self.__content_summary[2].find(name="dd").get_text()
+        duration_list = list(reversed(duration_text.replace('約', '').replace('時間', ':').replace('分', '').split(':')))
+        minutes = int(duration_list[0]) if len(duration_list) > 0 else 0
+        hours = int(duration_list[1]) if len(duration_list) > 1 else 0
+        duration_sec = timedelta(hours=hours, minutes=minutes).seconds
+        return round(duration_sec/60)
+
     def __get_time(self, time_raw):
         href_time_sec = time_raw.replace("#", "")
         href_time_min = float(href_time_sec) / 60
@@ -176,37 +162,17 @@ class MeetingInfoPage:
 
 
 class MeetingDownloader:
-    #@retry(TimeoutException)
-    def __init__(self, url: str, browser: webdriver.Chrome):
+    def __init__(self, url: str):
         self.url = url
-        self.browser = browser
-        self.browser.get(url)
-        self.timeout = 10
-        try:
-            self.__wait_video_element_load()
-            self.__wait_video_duration_load()
-
-        except TimeoutException:
-            print("Timed out waiting for video element to load")
-        self.__meeting_page_response = self.browser.page_source
+        self.__meeting_page_response = requests.get(url)
         self.meeting_info_page = self.__get_meeting_info_page()
 
-    def __wait_video_element_load(self):
-        element_present = EC.presence_of_element_located((By.CLASS_NAME, 'vjs-duration-display'))
-        WebDriverWait(self.browser, self.timeout).until(element_present)
-        play_button = self.browser.find_element(by=By.CLASS_NAME, value='video-js')
-        play_button.click()
-
-    def __wait_video_duration_load(self):
-        text_before = self.browser.find_element(by=By.XPATH, value='//*[@id="xCt3"]/div/div[7]/div[5]/div').text
-        duration_text_element = EC.text_to_be_present_in_element((By.XPATH, '//*[@id="xCt3"]/div/div[7]/div[5]/div'), text_before)
-        WebDriverWait(self.browser, self.timeout).until_not(duration_text_element)
 
     def __get_meeting_info_page(self):
         pprint(self.url + " を取得中")
-        if (self.__meeting_page_response is not None):
+        if (self.__meeting_page_response.status_code == 200):
             meeting_page_bs = BeautifulSoup(
-                self.__meeting_page_response, "html.parser")
+                self.__meeting_page_response.content, "html.parser")
             meeting_info_page = MeetingInfoPage(self.url, meeting_page_bs)
             if (meeting_info_page.has_contents):
                 return meeting_info_page
@@ -217,8 +183,7 @@ class MeetingDownloader:
 
 
 class MeetingsDownloader:
-    def __init__(self, browser: webdriver.Chrome):
-        self.browser = browser
+    def __init__(self):
         self.meeting_info_page_list = self.__get_meeting_info_page()
         self.meeting_info_list_dict = self.__get_meeting_info_dicts()
         self.meeting_dict_list = self.__get_meeting_dict_list()
@@ -228,7 +193,7 @@ class MeetingsDownloader:
         meeting_info_list = []
         for i in range(SID_END - SID_BEGIN + 1):
             url = URL_BASE + str(SID_BEGIN + i)
-            meeting_downloader = MeetingDownloader(url, self.browser)
+            meeting_downloader = MeetingDownloader(url)
             if (meeting_downloader.meeting_info_page):
                 meeting_info_list.append(meeting_downloader.meeting_info_page)
             sleep(1)
@@ -261,11 +226,9 @@ class MeetingsDownloader:
         return meeting_dict_list
 
 
-browser = webdriver.Chrome()
-meetings_downloader = MeetingsDownloader(browser)
-#meetings_df = meetings_downloader.meetings_df
-#meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
-#browser.close()
+meetings_downloader = MeetingsDownloader()
+meetings_df = meetings_downloader.meetings_df
+meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
 
 class UpperHouseMember:
     def __init__(self, name, name_kana, party):
@@ -392,5 +355,5 @@ class GenerateExcel:
             self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
             self.sangiin_members_df.to_excel(writer, sheet_name="元データ・参議院議員")
 
-#excel_generator = GenerateExcel(True)
-#excel_generator.generate()
+excel_generator = GenerateExcel(True)
+excel_generator.generate()
