@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import sleep
 from pprint import pprint
 import requests
@@ -69,8 +69,8 @@ class MeetingInfoPage:
         self.meeting_page_bs = meeting_page_bs
         self.__video_contents = self.__get_video_contents()
         if (self.__video_contents):
-            self.video_duration = self.__get_video_duration()
-            pprint(self.video_duration)
+            self.video_duration_min = self.__get_video_duration_min()
+            pprint(self.video_duration_min)
 
         self.__detail_contents = self.__get_detail_contents()
         self.has_contents = self.__detail_contents is not None
@@ -85,11 +85,14 @@ class MeetingInfoPage:
 
             self.meeting = self.__get_meeting()
 
-    def __get_video_duration(self):
+    def __get_video_duration_min(self):
         duration_area = self.__video_contents.find(name="div", class_="vjs-duration-display")
-        duration_text = duration_area.text
-        #duration_text = duration_text.replace('Duration Time ', '')
-        return duration_text
+        duration_list = list(reversed(duration_area.text.replace('Duration Time ', '').split(':')))
+        seconds = int(duration_list[0]) if len(duration_list) > 0 else 0
+        minutes = int(duration_list[1]) if len(duration_list) > 1 else 0
+        hours = int(duration_list[2]) if len(duration_list) > 2 else 0
+        duration_sec = timedelta(hours=hours, minutes=minutes, seconds=seconds).seconds
+        return round(duration_sec / 60)
 
     def __get_meeting(self):
         return Meeting(
