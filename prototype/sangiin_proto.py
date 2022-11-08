@@ -15,7 +15,6 @@ import pandas as pd
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
 SID_END = 6978
-
 MEETINGS_CSV_FILE_NAME = "sanngiin_meetings.csv"
 SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
 
@@ -140,9 +139,13 @@ class MeetingInfoPage:
 
     def __get_meeting_duration(self):
         duration_text: str = self.__content_summary[2].find(name="dd").get_text()
-        duration_list = list(reversed(duration_text.replace('約', '').replace('時間', ':').replace('分', '').split(':')))
-        minutes = int(duration_list[0]) if len(duration_list) > 0 else 0
-        hours = int(duration_list[1]) if len(duration_list) > 1 else 0
+
+        hours_r: str = re.search(r'\d+時間', duration_text)
+        minutes_r: str = re.search(r'\d+分', duration_text)
+
+        hours = int(hours_r.group().replace('時間', '')) if hours_r else 0
+        minutes = int(minutes_r.group().replace('分', '')) if minutes_r else 0
+
         duration_sec = timedelta(hours=hours, minutes=minutes).seconds
         return round(duration_sec/60)
 
@@ -196,7 +199,7 @@ class MeetingsDownloader:
             meeting_downloader = MeetingDownloader(url)
             if (meeting_downloader.meeting_info_page):
                 meeting_info_list.append(meeting_downloader.meeting_info_page)
-            sleep(1)
+            #sleep(1)
         return meeting_info_list
 
     def __get_meeting_info_dicts(self) -> list[dict]:
