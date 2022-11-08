@@ -5,6 +5,11 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 
 # https://www.webtv.sangiin.go.jp/webtv/detail.php?sid=6637
 # 2022年度最初の国会
@@ -14,7 +19,7 @@ import pandas as pd
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
 SID_BEGIN = 6637
-SID_END = 6978
+SID_END = 6637
 
 MEETINGS_CSV_FILE_NAME = "sanngiin_meetings.csv"
 SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
@@ -62,6 +67,11 @@ class MeetingInfoPage:
     def __init__(self, url: str, meeting_page_bs: BeautifulSoup):
         self.url = url
         self.meeting_page_bs = meeting_page_bs
+        self.__video_contents = self.__get_video_contents()
+        if (self.__video_contents):
+            self.video_duration = self.__get_video_duration()
+            pprint(self.video_duration)
+
         self.__detail_contents = self.__get_detail_contents()
         self.has_contents = self.__detail_contents is not None
         if (self.__detail_contents):
@@ -74,6 +84,12 @@ class MeetingInfoPage:
             self.__speaches = self.__get_speaches()
 
             self.meeting = self.__get_meeting()
+
+    def __get_video_duration(self):
+        duration_area = self.__video_contents.find(name="div", class_="vjs-duration-display")
+        duration_text = duration_area.text
+        #duration_text = duration_text.replace('Duration Time ', '')
+        return duration_text
 
     def __get_meeting(self):
         return Meeting(
@@ -105,7 +121,15 @@ class MeetingInfoPage:
 
         return Speach(name, attributes, speaking_time)
 
-    def __get_detail_contents(self):
+    def __get_video_contents(self) -> BeautifulSoup | None:
+        video_contents = self.meeting_page_bs.find(
+            name='div', id="movie-area")
+        if video_contents:
+            return video_contents
+        else:
+            pprint("video content not found.")
+
+    def __get_detail_contents(self) -> BeautifulSoup | None:
         detail_contents = self.meeting_page_bs.find(
             name="div", id="detail-contents-inner")
         if (detail_contents):
@@ -149,16 +173,37 @@ class MeetingInfoPage:
 
 
 class MeetingDownloader:
-    def __init__(self, url: str):
+    #@retry(TimeoutException)
+    def __init__(self, url: str, browser: webdriver.Chrome):
         self.url = url
-        self.__meeting_page_response = requests.get(url)
+        self.browser = browser
+        self.browser.get(url)
+        self.timeout = 10
+        try:
+            self.__wait_video_element_load()
+            self.__wait_video_duration_load()
+
+        except TimeoutException:
+            print("Timed out waiting for video element to load")
+        self.__meeting_page_response = self.browser.page_source
         self.meeting_info_page = self.__get_meeting_info_page()
+
+    def __wait_video_element_load(self):
+        element_present = EC.presence_of_element_located((By.CLASS_NAME, 'vjs-duration-display'))
+        WebDriverWait(self.browser, self.timeout).until(element_present)
+        play_button = self.browser.find_element(by=By.CLASS_NAME, value='video-js')
+        play_button.click()
+
+    def __wait_video_duration_load(self):
+        text_before = self.browser.find_element(by=By.XPATH, value='//*[@id="xCt3"]/div/div[7]/div[5]/div').text
+        duration_text_element = EC.text_to_be_present_in_element((By.XPATH, '//*[@id="xCt3"]/div/div[7]/div[5]/div'), text_before)
+        WebDriverWait(self.browser, self.timeout).until_not(duration_text_element)
 
     def __get_meeting_info_page(self):
         pprint(self.url + " を取得中")
-        if (self.__meeting_page_response.status_code == 200):
+        if (self.__meeting_page_response is not None):
             meeting_page_bs = BeautifulSoup(
-                self.__meeting_page_response.content, "html.parser")
+                self.__meeting_page_response, "html.parser")
             meeting_info_page = MeetingInfoPage(self.url, meeting_page_bs)
             if (meeting_info_page.has_contents):
                 return meeting_info_page
@@ -169,7 +214,8 @@ class MeetingDownloader:
 
 
 class MeetingsDownloader:
-    def __init__(self):
+    def __init__(self, browser: webdriver.Chrome):
+        self.browser = browser
         self.meeting_info_page_list = self.__get_meeting_info_page()
         self.meeting_info_list_dict = self.__get_meeting_info_dicts()
         self.meeting_dict_list = self.__get_meeting_dict_list()
@@ -179,7 +225,7 @@ class MeetingsDownloader:
         meeting_info_list = []
         for i in range(SID_END - SID_BEGIN + 1):
             url = URL_BASE + str(SID_BEGIN + i)
-            meeting_downloader = MeetingDownloader(url)
+            meeting_downloader = MeetingDownloader(url, self.browser)
             if (meeting_downloader.meeting_info_page):
                 meeting_info_list.append(meeting_downloader.meeting_info_page)
             sleep(1)
@@ -212,9 +258,11 @@ class MeetingsDownloader:
         return meeting_dict_list
 
 
-#meetings_downloader = MeetingsDownloader()
+browser = webdriver.Chrome()
+meetings_downloader = MeetingsDownloader(browser)
 #meetings_df = meetings_downloader.meetings_df
 #meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
+#browser.close()
 
 class UpperHouseMember:
     def __init__(self, name, name_kana, party):
@@ -321,8 +369,8 @@ class GenerateExcel:
             "attributes": "属性",
             "time_min": "時間"
         }, inplace=True)
-        self.merged_master.sort_values(
-            ['議員名', '日にち'], inplace=True)
+        #self.merged_master.sort_values(
+            #['議員名', '日にち'], inplace=True)
         self.merged_master.reset_index(inplace=True, drop=True)
 
         self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
@@ -341,7 +389,5 @@ class GenerateExcel:
             self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
             self.sangiin_members_df.to_excel(writer, sheet_name="元データ・参議院議員")
 
-excel_generator = GenerateExcel(True)
-pprint(excel_generator.meetings_df)
-pprint(excel_generator.sangiin_members_df)
-excel_generator.generate()
+#excel_generator = GenerateExcel(True)
+#excel_generator.generate()
