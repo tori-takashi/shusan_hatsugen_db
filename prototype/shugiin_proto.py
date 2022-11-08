@@ -414,8 +414,8 @@ class GenerateExcel:
             "topics": "案件",
             "attributes": "属性"
         }, inplace=True)
-        self.merged_master.sort_values(
-            ['議員名', '日にち'], inplace=True)
+        #self.merged_master.sort_values(
+            #['議員名', '日にち'], inplace=True)
         self.merged_master.reset_index(inplace=True, drop=True)
 
         self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
