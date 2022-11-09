@@ -229,9 +229,9 @@ class MeetingsDownloader:
         return meeting_dict_list
 
 
-meetings_downloader = MeetingsDownloader()
-meetings_df = meetings_downloader.meetings_df
-meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
+#meetings_downloader = MeetingsDownloader()
+#meetings_df = meetings_downloader.meetings_df
+#meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
 
 class UpperHouseMember:
     def __init__(self, name, name_kana, party):
@@ -348,7 +348,7 @@ class GenerateExcel:
             self.get_blacklist_str())]
 
         self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
-        self.filtered_by_time = self.purified_by_blacklist[~self.purified_by_blacklist["時間"] > 3]
+        self.filtered_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] <= 3]
 
         with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
             self.purified_by_time.to_excel(writer, sheet_name="最終データ")

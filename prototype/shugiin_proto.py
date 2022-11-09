@@ -162,7 +162,8 @@ class MeetingDetailsPage:
                 responders_header_elm)
             title_eliminated = title_eliminated[:responder_header_index]
 
-        if (len(title_eliminated) > 1):
+        # trが空行とかいうキチガイ実装への対応
+        if (title_eliminated[-1].select_one('td[width="380"]') is None):
             title_eliminated = title_eliminated[:-1]
 
         speakers_list = [
@@ -424,7 +425,7 @@ class GenerateExcel:
             self.get_blacklist_str())]
 
         self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
-        self.filtered_by_time = self.purified_by_blacklist[~self.purified_by_blacklist["時間"] > 3]
+        self.filtered_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] <= 3]
 
         with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
             self.purified_by_time.to_excel(writer, sheet_name="最終データ")
@@ -446,9 +447,6 @@ class GenerateExcel:
 #diet_member_downloader = DietMemberDownloader()
 #diet_members_df = diet_member_downloader.diet_members_df
 #diet_members_df.to_csv(SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME)
-
-#excel_generator = GenerateExcel(
-    #read_from_files=False, meetings_df=meetings_df, diet_members_df=diet_members_df)
 
 excel_generator = GenerateExcel(read_from_files=True)
 excel_generator.generate()
