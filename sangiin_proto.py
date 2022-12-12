@@ -13,10 +13,11 @@ import pandas as pd
 
 
 URL_BASE = "https://www.webtv.sangiin.go.jp/webtv/detail.php?sid="
-SID_BEGIN = 6637
-SID_END = 6978
-MEETINGS_CSV_FILE_NAME = "sanngiin_meetings.csv"
+SID_BEGIN = 7034
+SID_END = 7199
+MEETINGS_CSV_FILE_NAME = "sangiin_meetings.csv"
 SANGIIN_MEMBERS_CSV_FILE_NAME = "upper_house_members.csv"
+MEETINGS_TERM = 210
 
 OUTPUT_FILE_NAME = "sangiin.xlsx"
 
@@ -274,7 +275,7 @@ class UpperHouseMembersPage:
         
 class UpperHouseMembersDownloader:
     def __init__(self):
-        url = "https://www.sangiin.go.jp/japanese/joho1/kousei/giin/200/giin.htm"
+        url = "https://www.sangiin.go.jp/japanese/joho1/kousei/giin/"+str(MEETINGS_TERM)+"/giin.htm"
         upper_house_members_response = requests.get(url)
         upper_house_members_bs = BeautifulSoup(
             upper_house_members_response.content, 'html.parser')
@@ -288,8 +289,8 @@ class UpperHouseMembersDownloader:
             "name_kana": member.name_kana,
         } for member in self.upper_house_members_page.members]
 
-#upper_house_members_downloader = UpperHouseMembersDownloader()
-#upper_house_members_downloader.upper_house_members_df.to_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
+upper_house_members_downloader = UpperHouseMembersDownloader()
+upper_house_members_downloader.upper_house_members_df.to_csv(SANGIIN_MEMBERS_CSV_FILE_NAME)
 
 class GenerateExcel:
     def __init__(self, read_from_files, meetings_df=None, sangiin_members_df=None):
@@ -347,13 +348,9 @@ class GenerateExcel:
         self.filtered_by_blacklist = self.merged_master[self.merged_master["属性"].str.contains(
             self.get_blacklist_str())]
 
-        self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
-        self.filtered_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] <= 3]
-
         with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
-            self.purified_by_time.to_excel(writer, sheet_name="最終データ")
+            self.purified_by_blacklist.to_excel(writer, sheet_name="最終データ")
             self.filtered_by_blacklist.to_excel(writer, sheet_name="抽出・ブラックリスト")
-            self.filtered_by_time.to_excel(writer, sheet_name="抽出・ブラックリスト除去済み・1~3分")
             self.merged_master.to_excel(writer, sheet_name="結合全データ")
             self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
             self.sangiin_members_df.to_excel(writer, sheet_name="元データ・参議院議員")

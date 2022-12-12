@@ -424,13 +424,8 @@ class GenerateExcel:
         self.filtered_by_blacklist = self.merged_master[self.merged_master["属性"].str.contains(
             self.get_blacklist_str())]
 
-        self.purified_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] > 3]
-        self.filtered_by_time = self.purified_by_blacklist[self.purified_by_blacklist["時間"] <= 3]
-
         with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
-            self.purified_by_time.to_excel(writer, sheet_name="最終データ")
-            self.filtered_by_time.to_excel(
-                writer, sheet_name="抽出・ブラックリスト除去済み・1~3分")
+            self.purified_by_blacklist.to_excel(writer, sheet_name="最終データ")
             self.filtered_by_blacklist.to_excel(
                 writer, sheet_name="抽出・ブラックリスト")
             self.merged_master.to_excel(writer, sheet_name="結合全データ")
@@ -438,8 +433,8 @@ class GenerateExcel:
             self.diet_members_df.to_excel(writer, sheet_name="元データ・衆議院議員")
 
 
-#meeting_start_date = date(2022, 1, 1)
-#meeting_end_date = date(2022, 6, 30)
+#meeting_start_date = date(2022, 8, 19)
+#meeting_end_date = date(2022, 12, 10)
 #meetings_downloader = MeetingsDownloader(meeting_start_date, meeting_end_date)
 #meetings_df = meetings_downloader.meetings_df
 #meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
