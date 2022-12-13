@@ -13,14 +13,6 @@ import pandas as pd
 MEETINGS_URL_BASE = "https://www.shugiintv.go.jp/jp/"
 MEETINGS_PARAM_BASE = "ex=VL"
 
-MEETINGS_CSV_FILE_NAME = "shugiin_meetings.csv"
-SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME = "shugiin_diet_members.csv"
-
-OUTPUT_FILE_NAME = "shugiin.xlsx"
-
-# 会議
-
-
 class MeetingSearchResult:
     def __init__(self, result_elm: bs4.element.Tag):
         self.meeting_name = self.__get_meeting_name(result_elm)
@@ -361,87 +353,3 @@ class DietMemberDownloader:
         diet_members_dict_list = [diet_member.to_dict()
                                   for diet_member in self.diet_members]
         return pd.DataFrame(diet_members_dict_list)
-
-# エクセルファイル生成
-
-
-class GenerateExcel:
-    def __init__(self, read_from_files, meetings_df=None, diet_members_df=None):
-        self.read_from_files = read_from_files
-        if (self.read_from_files):
-            self.meetings_df = pd.read_csv(MEETINGS_CSV_FILE_NAME)
-            self.diet_members_df = pd.read_csv(
-                SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME)
-        else:
-            self.meetings_df = meetings_df
-            self.diet_members_df = diet_members_df
-
-    def merge_df(self):
-        return pd.merge(self.meetings_df, self.diet_members_df,
-                        left_on="name", right_on="name_kanji", how='left').drop(columns=["name_kanji", "Unnamed: 0_x", "Unnamed: 0_y"])
-
-    def get_blacklist_str(self):
-        return "|".join(self.blacklist)
-
-    def generate(self):
-        self.blacklist = [
-            "委員長",
-            "大臣",
-            "議長",
-            "委員長",
-            "会長",
-            "主査",
-            "長官",
-            "担当",
-            "参考人",
-            "公述人",
-            "局長",
-            "採決",
-            "総裁",
-            "ウクライナ大統領",
-            "日本弁護士連合会",
-            "参議院"]
-
-        self.merged_master = self.merge_df()
-        self.merged_master = self.merged_master.reindex(
-            columns=['date', 'meeting_name', 'name', 'name_kana', 'party', 'time_min', 'topics', 'attributes'])
-        self.merged_master.rename(columns={
-            "date": "日にち",
-            "meeting_name": "委員会",
-            "name": "議員名",
-            "name_kana": "ふりがな",
-            "party": "政党",
-            "time_min": "時間",
-            "topics": "案件",
-            "attributes": "属性"
-        }, inplace=True)
-        #self.merged_master.sort_values(
-            #['議員名', '日にち'], inplace=True)
-        self.merged_master.reset_index(inplace=True, drop=True)
-
-        self.purified_by_blacklist = self.merged_master[~self.merged_master["属性"].str.contains(
-            self.get_blacklist_str())]
-        self.filtered_by_blacklist = self.merged_master[self.merged_master["属性"].str.contains(
-            self.get_blacklist_str())]
-
-        with pd.ExcelWriter(OUTPUT_FILE_NAME) as writer:
-            self.purified_by_blacklist.to_excel(writer, sheet_name="最終データ")
-            self.filtered_by_blacklist.to_excel(
-                writer, sheet_name="抽出・ブラックリスト")
-            self.merged_master.to_excel(writer, sheet_name="結合全データ")
-            self.meetings_df.to_excel(writer, sheet_name="元データ・会議")
-            self.diet_members_df.to_excel(writer, sheet_name="元データ・衆議院議員")
-
-
-#meeting_start_date = date(2022, 8, 19)
-#meeting_end_date = date(2022, 12, 10)
-#meetings_downloader = MeetingsDownloader(meeting_start_date, meeting_end_date)
-#meetings_df = meetings_downloader.meetings_df
-#meetings_df.to_csv(MEETINGS_CSV_FILE_NAME)
-
-#diet_member_downloader = DietMemberDownloader()
-#diet_members_df = diet_member_downloader.diet_members_df
-#diet_members_df.to_csv(SHUGIIN_DIET_MEMBERS_CSV_FILE_NAME)
-
-excel_generator = GenerateExcel(read_from_files=True)
-excel_generator.generate()

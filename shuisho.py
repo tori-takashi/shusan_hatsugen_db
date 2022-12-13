@@ -2,9 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-MEETINGS_TERM = 210
+from config import MEETING_TERM
+
 SHUGIIN_SHUISHO_URL_BASE = "https://www.shugiin.go.jp/internet/itdb_shitsumon.nsf/html/shitsumon/"
-SANGIIN_SHUISHO_URL = "https://www.sangiin.go.jp/japanese/joho1/kousei/syuisyo/"+str(MEETINGS_TERM)+"/syuisyo.htm"
+SANGIIN_SHUISHO_URL = "https://www.sangiin.go.jp/japanese/joho1/kousei/syuisyo/"+str(MEETING_TERM)+"/syuisyo.htm"
 
 class PageNotFoundError(Exception):
     pass
@@ -31,7 +32,7 @@ class ShugiinShuishoClient:
         return questions
 
     def download_question_page(self, question_index: int):
-        shugiin_questions_response = requests.get(SHUGIIN_SHUISHO_URL_BASE+ str(MEETINGS_TERM)+ "{:03}.htm".format(question_index))
+        shugiin_questions_response = requests.get(SHUGIIN_SHUISHO_URL_BASE+ str(MEETING_TERM)+ "{:03}.htm".format(question_index))
         if (shugiin_questions_response.status_code == 404):
             raise PageNotFoundError
         return BeautifulSoup(shugiin_questions_response.content, 'html.parser')
@@ -86,14 +87,7 @@ class SangiinShuishoClient:
                 '件名': question_title,
                 '提出者': question_persion
             }
+            print(question_dict['質問番号'], ':', question_dict['件名'], ':', question_dict['提出者'])
             question_list.append(question_dict)
         return question_list
-
-#shugiin_shuisho_client = ShugiinShuishoClient()
-#shugiin_shuisho_df = shugiin_shuisho_client.generate_questions_df()
-#shugiin_shuisho_df.to_csv('衆議院主意書.csv')
-
-#sangiin_shuisho_client = SangiinShuishoClient()
-#sangiin_shuisho_df = sangiin_shuisho_client.generate_questions_df()
-#sangiin_shuisho_df.to_csv('参議院主意書.csv')
 
