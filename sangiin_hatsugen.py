@@ -256,12 +256,6 @@ class UpperHouseMembersPage:
             else:
                 members_list.append(UpperHouseMember(name, name_kana, party))
 
-        # データが古いので手動で対応
-        members_list.append(UpperHouseMember("山崎真之輔", "やまざき しんのすけ", ""))
-        members_list.append(UpperHouseMember("宮口治子", "みやぐち はるこ", ""))
-        members_list.append(UpperHouseMember("羽田次郎", "はた じろう", ""))
-        members_list.append(UpperHouseMember("比嘉奈津美", "ひが なつみ", ""))
-
         return members_list
         
 class UpperHouseMembersDownloader:

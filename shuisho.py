@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+from pprint import pprint
 
 from config import MEETING_TERM
 
@@ -77,7 +78,7 @@ class SangiinShuishoClient:
         question_list = []
         questions_table = questions_bs4.find_all('table')[1]
         question_rows = questions_table.find_all('tr')
-        questions = [question_rows[i-3:i] for i in range(1, len(question_rows)) if i % 3 == 0]
+        questions = [question_rows[i-3:i] for i in range(1, len(question_rows) + 1) if i % 3 == 0]
         for question in questions:
             question_number = int(question[1].find_all('td')[0].text.strip())
             question_title = question[0].find('td').text.strip()
